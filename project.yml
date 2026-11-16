@@ -1,0 +1,48 @@
+# XcodeGen spec for Storage Genie (iOS). Copied from fire17/hero-greetings-ios per /ios-testflight.
+# The .xcodeproj is generated on the CI runner (`xcodegen generate`) and is NEVER committed.
+name: StorageGenie
+options:
+  bundleIdPrefix: dev.fire17
+  deploymentTarget:
+    iOS: "17.0"
+  developmentLanguage: en
+  createIntermediateGroups: true
+settings:
+  base:
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"   # CI overrides with the workflow run number
+    SWIFT_VERSION: "5.0"
+    TARGETED_DEVICE_FAMILY: "1"    # iPhone only
+    DEVELOPMENT_TEAM: ""           # CI fills it from the APPLE_TEAM_ID secret
+    CODE_SIGN_STYLE: Automatic
+packages:
+  # n0's official Swift bindings for iroh (prebuilt xcframework, iOS device + simulator).
+  IrohLib:
+    url: https://github.com/n0-computer/iroh-ffi
+    exactVersion: 1.1.0
+  StorageGenieCore:
+    path: StorageGenieCore
+targets:
+  StorageGenie:
+    type: application
+    platform: iOS
+    sources:
+      - path: StorageGenie
+        excludes:
+          - "Info.plist"
+    dependencies:
+      - package: IrohLib
+      - package: StorageGenieCore
+      - sdk: SystemConfiguration.framework   # iroh netwatch on Apple platforms (iroh-ffi Swift README)
+      - sdk: Network.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.fire17.storagegenie
+        PRODUCT_NAME: StorageGenie
+        TARGETED_DEVICE_FAMILY: "1"   # repeated: xcodegen's iOS preset sets "1,2" at target level ("Invalid bundle" pitfall)
+        INFOPLIST_FILE: StorageGenie/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        SUPPORTS_MACCATALYST: NO
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+        SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD: NO
+    scheme: {}
