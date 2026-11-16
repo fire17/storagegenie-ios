@@ -10,8 +10,8 @@ struct StorageGenieApp: App {
     @StateObject private var model = AppModel()
 
     var body: some Scene {
-        WindowGroup { HomeView().environmentObject(model) }
-            .onChange(of: phase) { p in
+        WindowGroup { HomeView(link: model.link).environmentObject(model) }
+            .onChange(of: phase) { _, p in
                 model.visible = (p == .active)
                 p == .active ? model.link.start() : model.link.stop()   // no background link on iOS
             }
@@ -20,25 +20,43 @@ struct StorageGenieApp: App {
 
 @MainActor
 final class AppModel: ObservableObject {
-    let keychain = KeychainStore()
-    let library = PhotosLibrary()
-    let proposals = Proposals()
-    lazy var binding = Binding(store: keychain)
-    lazy var commands = Commands(library: library, proposals: proposals,
-                                 version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?",
-                                 appOpen: { [weak self] in self?.visible ?? false })
-    lazy var link = Link(binding: binding, commands: commands, keychain: keychain)
+    let keychain: KeychainStore
+    let library: PhotosLibrary
+    let proposals: Proposals
+    let binding: StorageGenieCore.Binding
+    let commands: Commands
+    let link: Link
 
-    @Published var visible = false
+    /// Set from scenePhase. Mirrored into a lock-protected flag the link reads from any thread (no main-thread hop, no deadlock).
+    @Published var visible = false { didSet { onScreen.set(visible) } }
+    let onScreen = Flag()
     @Published var pending: Proposals.Proposal?
 
     init() {
-        commands.onProposal = { [weak self] p in DispatchQueue.main.async { self?.pending = p } }
+        let kc = KeychainStore(), lib = PhotosLibrary(), props = Proposals()
+        let bind = StorageGenieCore.Binding(store: kc)
+        let cmds = Commands(library: lib, proposals: props,
+                            version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?",
+                            appOpen: { false })
+        keychain = kc; library = lib; proposals = props; binding = bind; commands = cmds
+        link = Link(binding: bind, commands: cmds, keychain: kc)
+        // The link answers only while the app is on screen.
+        let flag = onScreen
+        cmds.appOpen = { flag.get() }
+        cmds.onProposal = { [weak self] p in DispatchQueue.main.async { self?.pending = p } }
     }
 }
 
+/// A Bool that any thread may read or write.
+final class Flag: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = false
+    func get() -> Bool { lock.lock(); defer { lock.unlock() }; return value }
+    func set(_ v: Bool) { lock.lock(); value = v; lock.unlock() }
+}
+
 /// Binding state + the node key in the Keychain, this device only (never synced to iCloud, never in backups).
-final class KeychainStore: Binding.Store {
+final class KeychainStore: BindingStore {
     private let service = "com.fire17.storagegenie"
 
     func get(_ key: String) -> String? {
@@ -63,7 +81,7 @@ final class KeychainStore: Binding.Store {
     /// The iroh node key: 32 random bytes, made once.
     func secretKey() throws -> Data {
         if let s = get("sk"), let d = Data(base64Encoded: s), d.count == 32 { return d }
-        let d = Data(Binding.secureRandom(32))
+        let d = Data(StorageGenieCore.Binding.secureRandom(32))
         set("sk", d.base64EncodedString())
         return d
     }

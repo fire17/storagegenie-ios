@@ -7,24 +7,22 @@ import StorageGenieCore
 ///
 /// iOS difference: no background service. The link runs while the app is in the foreground and is closed when the app
 /// goes to the background (scenePhase), so the genie can only look while the person has the app open.
-///
-/// First compile happens on the CI runner. The IrohLib call
-/// names below follow iroh-ffi 1.1.0 as used by the Kotlin app (Endpoint.bind / accept / acceptBi / readExact /
-/// writeAll); re-check them against IrohLib.swift on the first Xcode build.
+/// API calls follow IrohLib.swift v1.1.0 (Endpoint.bind / acceptNext / Incoming.accept / Accepting.connect / acceptBi).
 @MainActor
 final class Link: ObservableObject {
-    static let alpn = Array("storagegenie/1".utf8)
+    static let alpn = Data("storagegenie/1".utf8)
+    static let maxFrame = 1_000_000   // same cap as Android's Link.kt
 
     @Published private(set) var online = false
     @Published private(set) var nodeId = ""
     private var endpoint: Endpoint?
     private var task: Task<Void, Never>?
 
-    let binding: Binding
+    let binding: StorageGenieCore.Binding
     let commands: Commands
     private let keychain: KeychainStore
 
-    init(binding: Binding, commands: Commands, keychain: KeychainStore) {
+    init(binding: StorageGenieCore.Binding, commands: Commands, keychain: KeychainStore) {
         self.binding = binding; self.commands = commands; self.keychain = keychain
     }
 
@@ -44,12 +42,14 @@ final class Link: ObservableObject {
         while !Task.isCancelled {
             do {
                 let key = try keychain.secretKey()          // 32 bytes, generated once, Keychain (this device only)
-                let ep = try await Endpoint.bind(options: EndpointOptions(preset: presetN0(), secretKey: key, alpns: [Data(Link.alpn)]))
+                let ep = try await Endpoint.bind(options: EndpointOptions(
+                    preset: presetN0(), bindAddr: nil, secretKey: key, alpns: [Link.alpn], relayMode: nil, protocols: nil))
                 endpoint = ep
                 nodeId = ep.id().description
                 online = true
-                while !Task.isCancelled, let conn = try await ep.accept()?.connect() {
-                    Task { await self.serve(conn) }
+                while !Task.isCancelled {
+                    guard let incoming = await ep.acceptNext() else { try await Task.sleep(nanoseconds: 200_000_000); continue }
+                    Task { await self.serve(incoming) }
                 }
             } catch {
                 online = false
@@ -59,26 +59,37 @@ final class Link: ObservableObject {
     }
 
     /// One connection: auth frame, then commands until the genie closes.
-    private func serve(_ conn: Connection) async {
-        guard let (send, recv) = try? await conn.acceptBi() else { return }
-        func reply(_ o: [String: Any]) async throws { try await send.writeAll(buf: Frames.response(o)) }
-        func next() async throws -> [String: Any] {
-            guard let n = try Frames.readLength(Data(try await recv.readExact(size: 4))) else { throw Frames.FrameError.short }
-            return try Frames.parseRequest(Data(try await recv.readExact(size: UInt32(n))))
-        }
+    private func serve(_ incoming: Incoming) async {
         do {
+            let accepting = try await incoming.accept()
+            guard try await accepting.alpn() == Link.alpn else { return }
+            let conn = try await accepting.connect()
+            let bi = try await conn.acceptBi()
+            let recv = bi.recv(), send = bi.send()
+
+            func next() async throws -> [String: Any] {
+                guard let n = try Frames.readLength(try await recv.readExact(size: 4)) else { throw Frames.FrameError.short }
+                if n > Link.maxFrame { throw Frames.FrameError.tooBig(n) }
+                let body = n == 0 ? Data() : try await recv.readExact(size: UInt32(n))
+                return try Frames.parseRequest(body)
+            }
+            func reply(_ o: [String: Any]) async throws { try await send.writeAll(buf: try Frames.response(o)) }
+
             let hello = try await next()
             let genie = String((hello["genie"] as? String ?? "").prefix(80))
             switch binding.authenticate(given: hello["auth"] as? String ?? "", genie: genie) {
             case .refused(let e):
-                try await reply(["error": e]); try await send.finish(); return
+                try await reply(["error": e])
+                try await send.finish()
             case .ok(let g, let token):
-                var o: [String: Any] = ["ok": true, "paired": token != nil, "app": "storagegenie", "platform": "ios",
+                var o: [String: Any] = ["ok": true, "app": "storagegenie", "platform": "ios", "genie": g,
                                         "version": Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"]
-                if let t = token { o["token"] = t }
+                if let t = token { o["paired"] = true; o["token"] = t }
                 try await reply(o)
                 while !Task.isCancelled {
                     let cmd = try await next()
+                    // A forget in the app ends every session on the next command (same as Android).
+                    if !binding.isBound { try await reply(["error": "unpaired"]); break }
                     try await reply(commands.run(cmd, genie: g))
                 }
             }

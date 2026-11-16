@@ -5,6 +5,7 @@ import StorageGenieCore
 /// Every suggested item starts UNTICKED; Delete opens Apple's own sheet; nothing happens without both.
 struct HomeView: View {
     @EnvironmentObject var m: AppModel
+    @ObservedObject var link: Link
     @State private var ticked: Set<String> = []
     @State private var confirmForget = false
 
@@ -13,8 +14,8 @@ struct HomeView: View {
             List {
                 Section {
                     HStack {
-                        Circle().fill(m.link.online ? .green : .gray).frame(width: 10, height: 10)
-                        Text(m.link.online ? (m.binding.isBound ? "Connected to \(m.binding.genie ?? "your genie")" : "Waiting for your genie")
+                        Circle().fill(link.online ? .green : .gray).frame(width: 10, height: 10)
+                        Text(link.online ? (m.binding.isBound ? "Connected to \(m.binding.genie ?? "your genie")" : "Waiting for your genie")
                                            : "Offline")
                     }
                     Text("Your genie can look only while this app is open.").font(.footnote).foregroundStyle(.secondary)
@@ -29,8 +30,8 @@ struct HomeView: View {
                 if !m.binding.isBound {
                     Section("Pair with your genie") {
                         Text(m.binding.code()).font(.system(size: 34, weight: .bold, design: .monospaced))
-                        ShareLink(item: m.binding.pairingLine(nodeId: m.link.nodeId)) { Label("Send to my genie", systemImage: "paperplane") }
-                            .disabled(m.link.nodeId.isEmpty)
+                        ShareLink(item: m.binding.pairingLine(nodeId: link.nodeId)) { Label("Send to my genie", systemImage: "paperplane") }
+                            .disabled(link.nodeId.isEmpty)
                         Text("Send this line to your genie on WhatsApp. The code works once, for 30 minutes.")
                             .font(.footnote).foregroundStyle(.secondary)
                     }
@@ -52,7 +53,7 @@ struct HomeView: View {
         Section("Your genie suggests") {
             Text(p.reason).font(.callout)
             ForEach(p.paths, id: \.self) { id in
-                Toggle(isOn: SwiftUI.Binding(get: { ticked.contains(id) }, set: { $0 ? ticked.insert(id) : ticked.remove(id) })) {
+                Toggle(isOn: SwiftUI.Binding(get: { ticked.contains(id) }, set: { on in if on { ticked.insert(id) } else { ticked.remove(id) } })) {
                     Text(id).lineLimit(1).font(.footnote.monospaced())
                 }
             }

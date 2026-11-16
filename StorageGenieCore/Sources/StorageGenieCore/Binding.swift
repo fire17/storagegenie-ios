@@ -1,6 +1,12 @@
 import Foundation
 import CryptoKit
 
+/// Where binding state lives. The app passes a Keychain-backed store; tests pass memory.
+public protocol BindingStore: AnyObject {
+    func get(_ key: String) -> String?
+    func set(_ key: String, _ value: String?)
+}
+
 /// This iPhone's binding to ONE genie — a line-for-line port of the Android `Binding.kt` (PROTOCOL.md "## Pairing").
 ///
 /// One phone, one genie: the 6-char code is good for exactly one successful pairing. It is then traded for a long
@@ -11,23 +17,17 @@ public final class Binding {
     public static let codeTTL: TimeInterval = 30 * 60
     public static let maxFails = 5
 
-    /// Where state lives. The app passes a Keychain-backed store; tests pass memory.
-    public protocol Store: AnyObject {
-        func get(_ key: String) -> String?
-        func set(_ key: String, _ value: String?)
-    }
-
     public enum Auth: Equatable {
         case ok(genie: String, newToken: String?)
         case refused(String)   // "bound" | "auth"
     }
 
-    private let store: Store
+    private let store: BindingStore
     private let now: () -> Date
     private let random: (Int) -> [UInt8]
     private let lock = NSLock()
 
-    public init(store: Store, now: @escaping () -> Date = Date.init,
+    public init(store: BindingStore, now: @escaping () -> Date = Date.init,
                 random: @escaping (Int) -> [UInt8] = Binding.secureRandom) {
         self.store = store; self.now = now; self.random = random
     }
@@ -119,7 +119,7 @@ public final class Binding {
 }
 
 /// In-memory store (tests, previews).
-public final class MemoryStore: Binding.Store {
+public final class MemoryStore: BindingStore {
     public var values: [String: String] = [:]
     public init() {}
     public func get(_ key: String) -> String? { values[key] }
