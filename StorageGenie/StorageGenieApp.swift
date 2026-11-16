@@ -24,7 +24,7 @@ final class AppModel: ObservableObject {
     let library: PhotosLibrary
     let proposals: Proposals
     let binding: StorageGenieCore.Binding
-    let commands: Commands
+    let commands: StorageGenieCore.Commands
     let link: Link
 
     /// Set from scenePhase. Mirrored into a lock-protected flag the link reads from any thread (no main-thread hop, no deadlock).
@@ -35,7 +35,7 @@ final class AppModel: ObservableObject {
     init() {
         let kc = KeychainStore(), lib = PhotosLibrary(), props = Proposals()
         let bind = StorageGenieCore.Binding(store: kc)
-        let cmds = Commands(library: lib, proposals: props,
+        let cmds = StorageGenieCore.Commands(library: lib, proposals: props,
                             version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?",
                             appOpen: { false })
         keychain = kc; library = lib; proposals = props; binding = bind; commands = cmds

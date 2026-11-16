@@ -19,10 +19,10 @@ final class Link: ObservableObject {
     private var task: Task<Void, Never>?
 
     let binding: StorageGenieCore.Binding
-    let commands: Commands
+    let commands: StorageGenieCore.Commands
     private let keychain: KeychainStore
 
-    init(binding: StorageGenieCore.Binding, commands: Commands, keychain: KeychainStore) {
+    init(binding: StorageGenieCore.Binding, commands: StorageGenieCore.Commands, keychain: KeychainStore) {
         self.binding = binding; self.commands = commands; self.keychain = keychain
     }
 
