@@ -1,10 +1,10 @@
-# XcodeGen spec for Storage Genie (iOS). Copied from fire17/hero-greetings-ios per /ios-testflight.
+# XcodeGen spec for Storage Genie (iOS).
 # The .xcodeproj is generated on the CI runner (`xcodegen generate`) and is NEVER committed.
 name: StorageGenie
 options:
   bundleIdPrefix: dev.fire17
   deploymentTarget:
-    iOS: "17.0"
+    iOS: "17.5"   # IrohLib 1.1.0 requires iOS 17.5 (first CI run 43913241841)
   developmentLanguage: en
   createIntermediateGroups: true
 settings:

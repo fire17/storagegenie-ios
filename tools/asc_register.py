@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
-"""App Store Connect helper for Hero Greetings (iOS): register the bundle ID and list apps/builds.
+"""App Store Connect helper (iOS): register the bundle ID and list apps/builds.
 
-Adapted from PaleoKeyboard/tools/asc_register.py. Lives in ios/tools/ of the hero-greetings repo.
 
 Credentials come from the environment only; the key and the signed token are never printed:
   ASC_KEY_PATH   path to AuthKey_<KEY_ID>.p8 (keep it OUTSIDE the repo, e.g. ~/.keys/)

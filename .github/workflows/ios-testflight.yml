@@ -1,5 +1,5 @@
 # Build Storage Genie (iOS) in the cloud and upload it to TestFlight.
-# Copied from fire17/hero-greetings-ios per /ios-testflight; archive UNSIGNED (constellation flags, cert-cap pitfall).
+# Archive UNSIGNED; only -exportArchive signs (cloud-managed), so CI never mints a development certificate.
 #
 # PUBLIC-REPO SAFE: only manual / own-tag triggers (never pull_request*), read-only token, pinned actions,
 # no artifacts (an .ipa or log would be downloadable by anyone), the key file is deleted at the end.
